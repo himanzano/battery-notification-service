@@ -2,11 +2,19 @@
 
 namespace BatteryNotificationService;
 
+/// <summary>
+/// Background service that monitors the power status of the device and sends notifications
+/// when the power source changes (AC/Battery).
+/// </summary>
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
     private ManagementEventWatcher? _watcher;
     private bool _wasPluggedIn = IsPluggedIn();
 
+    /// <summary>
+    /// Executes the background service logic.
+    /// </summary>
+    /// <param name="stoppingToken">The cancellation token that indicates when the service should stop.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
@@ -14,27 +22,31 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             DateTimeOffset.Now
         );
 
-        // Notificação inicial
+        // Initial notification
         ShowNotification(
             _wasPluggedIn ? "Conectado na tomada" : "Usando bateria",
             $"Serviço iniciado. Status atual: {(_wasPluggedIn ? "AC" : "Bateria")}"
         );
 
-        // Monitora mudanças no status de energia
+        // Monitor power status changes
         StartPowerMonitoring(stoppingToken);
 
-        // Mantém o serviço rodando
+        // Keep the service running
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(1000, stoppingToken);
         }
     }
 
+    /// <summary>
+    /// Initializes and starts the WMI event watcher for power management events.
+    /// </summary>
+    /// <param name="stoppingToken">The cancellation token.</param>
     private void StartPowerMonitoring(CancellationToken stoppingToken)
     {
         try
         {
-            // Query WMI para detectar mudanças no status de energia
+            // WMI query to detect power status changes
             WqlEventQuery query = new("SELECT * FROM Win32_PowerManagementEvent");
             _watcher = new ManagementEventWatcher(query);
 
@@ -54,13 +66,16 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Checks the current power status and sends a notification if it has changed since the last check.
+    /// </summary>
     private void CheckPowerStatus()
     {
         try
         {
             bool isCurrentlyPluggedIn = IsPluggedIn();
 
-            // Detecta mudança de estado
+            // Detect state change
             if (isCurrentlyPluggedIn != _wasPluggedIn)
             {
                 _wasPluggedIn = isCurrentlyPluggedIn;
@@ -86,12 +101,21 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Determines whether the device is currently plugged into a power source.
+    /// </summary>
+    /// <returns>True if plugged in (AC online), otherwise false.</returns>
     private static bool IsPluggedIn()
     {
         var status = SystemInformation.PowerStatus;
         return status.PowerLineStatus == PowerLineStatus.Online;
     }
 
+    /// <summary>
+    /// Displays a Windows toast notification.
+    /// </summary>
+    /// <param name="title">The title of the notification.</param>
+    /// <param name="message">The message body of the notification.</param>
     private void ShowNotification(string title, string message)
     {
         try
@@ -125,6 +149,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         }
     }
 
+    /// <inheritdoc/>
     public override void Dispose()
     {
         _watcher?.Stop();
