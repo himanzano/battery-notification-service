@@ -3,8 +3,8 @@
 namespace BatteryNotificationService;
 
 /// <summary>
-/// Background service that monitors the power status of the device and sends notifications
-/// when the power source changes (AC/Battery).
+/// Background worker that monitors the device's power status and triggers
+/// Windows toast notifications when the power source changes (e.g., AC to Battery).
 /// </summary>
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
@@ -12,26 +12,26 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     private bool _wasPluggedIn = IsPluggedIn();
 
     /// <summary>
-    /// Executes the background service logic.
+    /// Starts the background execution logic for power monitoring.
     /// </summary>
-    /// <param name="stoppingToken">The cancellation token that indicates when the service should stop.</param>
+    /// <param name="stoppingToken">Triggered when the application is shutting down.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "Battery Notification Service iniciado em: {time}",
+            "Battery Notification Service started at: {time}",
             DateTimeOffset.Now
         );
 
-        // Initial notification
+        // Send initial notification with current status
         ShowNotification(
             _wasPluggedIn ? "Conectado na tomada" : "Usando bateria",
             $"Serviço iniciado. Status atual: {(_wasPluggedIn ? "AC" : "Bateria")}"
         );
 
-        // Monitor power status changes
+        // Initialize WMI monitoring
         StartPowerMonitoring(stoppingToken);
 
-        // Keep the service running
+        // Keep the task alive until cancellation is requested
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(1000, stoppingToken);
@@ -39,14 +39,14 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     }
 
     /// <summary>
-    /// Initializes and starts the WMI event watcher for power management events.
+    /// Sets up and starts a WMI event watcher to listen for Win32_PowerManagementEvent occurrences.
     /// </summary>
     /// <param name="stoppingToken">The cancellation token.</param>
     private void StartPowerMonitoring(CancellationToken stoppingToken)
     {
         try
         {
-            // WMI query to detect power status changes
+            // Use WMI to detect hardware-level power events
             WqlEventQuery query = new("SELECT * FROM Win32_PowerManagementEvent");
             _watcher = new ManagementEventWatcher(query);
 
@@ -54,20 +54,21 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             {
                 if (stoppingToken.IsCancellationRequested)
                     return;
+
                 CheckPowerStatus();
             };
 
             _watcher.Start();
-            logger.LogInformation("Monitoramento de energia ativado");
+            logger.LogInformation("Power status monitoring activated.");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Erro ao iniciar monitoramento de energia");
+            logger.LogError(ex, "Failed to start power monitoring.");
         }
     }
 
     /// <summary>
-    /// Checks the current power status and sends a notification if it has changed since the last check.
+    /// Compares the current power status with the last known state and triggers notifications on changes.
     /// </summary>
     private void CheckPowerStatus()
     {
@@ -75,19 +76,19 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         {
             bool isCurrentlyPluggedIn = IsPluggedIn();
 
-            // Detect state change
+            // Notify only if the state has changed (e.g., plugged in -> unplugged)
             if (isCurrentlyPluggedIn != _wasPluggedIn)
             {
                 _wasPluggedIn = isCurrentlyPluggedIn;
 
                 if (isCurrentlyPluggedIn)
                 {
-                    logger.LogInformation("Notebook conectado na tomada");
+                    logger.LogInformation("Device connected to AC power.");
                     ShowNotification("⚡ Conectado na tomada", "Seu notebook está sendo carregado");
                 }
                 else
                 {
-                    logger.LogInformation("Notebook desconectado da tomada");
+                    logger.LogInformation("Device disconnected from AC power (using battery).");
                     ShowNotification(
                         "🔋 Usando bateria",
                         "Seu notebook foi desconectado da tomada"
@@ -97,14 +98,14 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Erro ao verificar status de energia");
+            logger.LogError(ex, "Error while checking power status.");
         }
     }
 
     /// <summary>
-    /// Determines whether the device is currently plugged into a power source.
+    /// Queries the system to determine if the device is currently running on AC power.
     /// </summary>
-    /// <returns>True if plugged in (AC online), otherwise false.</returns>
+    /// <returns>True if the PowerLineStatus is Online (AC); otherwise, false.</returns>
     private static bool IsPluggedIn()
     {
         var status = SystemInformation.PowerStatus;
@@ -112,10 +113,10 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     }
 
     /// <summary>
-    /// Displays a Windows toast notification.
+    /// Generates and displays a native Windows Toast Notification using XML-based templates.
     /// </summary>
-    /// <param name="title">The title of the notification.</param>
-    /// <param name="message">The message body of the notification.</param>
+    /// <param name="title">The notification header.</param>
+    /// <param name="message">The notification body content.</param>
     private void ShowNotification(string title, string message)
     {
         try
@@ -141,11 +142,11 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 )
                 .Show(toast);
 
-            logger.LogInformation("Notificação exibida: {title}", title);
+            logger.LogInformation("Notification displayed: {title}", title);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Erro ao exibir notificação");
+            logger.LogError(ex, "Failed to display toast notification.");
         }
     }
 
