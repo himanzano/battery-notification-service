@@ -1,1 +1,1 @@
-# BatteryNotificationService
+# battery-notification-service
